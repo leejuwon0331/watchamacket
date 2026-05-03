@@ -1,0 +1,269 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>WATCHA MARKET</title>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;600;700;900&family=DM+Serif+Display&display=swap" rel="stylesheet">
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'Noto Sans KR',sans-serif;min-height:100vh;transition:background .3s}
+button{cursor:pointer;font-family:inherit}
+input:focus,textarea:focus{outline:none}
+::-webkit-scrollbar{height:4px;width:4px}
+::-webkit-scrollbar-thumb{background:#2a2a2a;border-radius:4px}
+@media(max-width:600px){.hide-m{display:none!important}.col-m{grid-template-columns:1fr!important}}
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.9/babel.min.js"></script>
+<script type="text/babel">
+const{useState,useEffect,useRef}=React;
+const G="#c8a55a";
+const TH={
+  dark:{bg:"#0a0a0a",card:"#111",bdr:"#1a1a1a",txt:"#e8e8e8",sub:"#888",mut:"#555",hdr:"rgba(10,10,10,.92)",inp:"#0f0f0f",ft:"#070707",sf:"#0e0e0e"},
+  light:{bg:"#f5f5f0",card:"#fff",bdr:"#e0e0da",txt:"#1a1a1a",sub:"#666",mut:"#999",hdr:"rgba(255,255,255,.92)",inp:"#fff",ft:"#eaeae5",sf:"#f0f0eb"}
+};
+const BRANDS=[{id:"all",label:"전체",icon:"⌚"},{id:"casio",label:"카시오",icon:"⚡"},{id:"seiko",label:"세이코",icon:"🔧"},{id:"orient",label:"오리엔트",icon:"🌀"},{id:"swatch",label:"스와치",icon:"🎨"},{id:"hamilton",label:"해밀턴",icon:"🇨🇭"}];
+const TIERS=[{id:"prime",name:"PRIME",price:2900,color:"#888780",bg:"#F1EFE8",tx:"#444441",who:"입문자",feats:["수수료 할인 (최대 1%)","상위노출 월 1회","시세 알림"]},{id:"royal",name:"ROYAL",price:14900,color:"#8E44AD",bg:"#EEEDFE",tx:"#3C3489",pop:true,who:"수집가",feats:["수수료 할인 (최대 1.5%)","상위노출 월 3회","경매 우선 입찰"]},{id:"black",name:"BLACK",price:39900,color:"#C8A55A",bg:"#FAEEDA",tx:"#633806",who:"컬렉터",feats:["수수료 할인 (최대 2%)","상위노출 무제한","VIP 경매 라운지"]}];
+const PT=[{id:"all",label:"전체",icon:"📋"},{id:"wristshot",label:"손목샷",icon:"📸"},{id:"review",label:"리뷰",icon:"⭐"},{id:"free",label:"자유",icon:"💬"}];
+const fS=n=>{if(n>=1e7)return(n/1e7).toFixed(1).replace(/\.0$/,"")+"천만";if(n>=1e4)return Math.round(n/1e4).toLocaleString()+"만";return n.toLocaleString()+"원"};
+const fF=n=>n.toLocaleString("ko-KR")+"원";
+const pc=(o,c)=>Math.round(((o-c)/o)*100);
+const bI=id=>(BRANDS.find(b=>b.id===id)||{}).icon||"⌚";
+const bL=id=>(BRANDS.find(b=>b.id===id)||{}).label||"";
+const ago=d=>{if(!d)return"";const s=Math.floor((Date.now()-new Date(d))/1000);if(s<60)return"방금 전";if(s<3600)return Math.floor(s/60)+"분 전";if(s<86400)return Math.floor(s/3600)+"시간 전";return Math.floor(s/86400)+"일 전"};
+
+async function api(p,o={}){const tk=localStorage.getItem("token");const h={"Content-Type":"application/json"};if(tk)h["Authorization"]="Bearer "+tk;try{const r=await fetch(p,{...o,headers:{...h,...(o.headers||{})}});return await r.json()}catch(e){return{error:"서버 연결 실패"}}}
+async function apiUp(p,fd){const tk=localStorage.getItem("token");const h={};if(tk)h["Authorization"]="Bearer "+tk;try{const r=await fetch(p,{method:"POST",headers:h,body:fd});return await r.json()}catch(e){return{error:"업로드 실패"}}}
+
+function App(){
+const[dark,setDark]=useState(true);const t=dark?TH.dark:TH.light;
+const[pg,setPg]=useState("home"),[user,setUser]=useState(null),[products,setProducts]=useState([]),[auctions,setAuctions]=useState([]),[posts,setPosts]=useState([]);
+const[sel,setSel]=useState(null),[selPost,setSelPost]=useState(null),[selTx,setSelTx]=useState(null),[myTx,setMyTx]=useState({buying:[],selling:[]});
+const[cat,setCat]=useState("all"),[q,setQ]=useState(""),[sort,setSort]=useState("latest"),[tab,setTab]=useState("buy"),[liked,setLiked]=useState(new Set()),[txMode,setTxMode]=useState("safe");
+const[authMode,setAuthMode]=useState("login"),[af,setAf]=useState({email:"",pw:"",name:""}),[authErr,setAuthErr]=useState("");
+const[sf,setSf]=useState({name:"",price:"",cond:"A급",cat:"casio",desc:"",kakao:""}),[sok,setSok]=useState(false),[selImgs,setSelImgs]=useState([]),[imgPrevs,setImgPrevs]=useState([]);
+const[bAmt,setBAmt]=useState(""),[bOk,setBOk]=useState(false),[msg,setMsg]=useState("");
+const[postType,setPostType]=useState("all"),[pf,setPf]=useState({title:"",content:"",type:"free"}),[cmt,setCmt]=useState(""),[trackNum,setTrackNum]=useState("");
+const[txTab,setTxTab]=useState("buying"),[reward,setReward]=useState(null),[shop,setShop]=useState([]);
+const[notifs,setNotifs]=useState([]),[unread,setUnread]=useState(0),[showNotif,setShowNotif]=useState(false);
+const[inqText,setInqText]=useState(""),[replyText,setReplyText]=useState(""),[filterCond,setFilterCond]=useState(""),[filterMin,setFilterMin]=useState(""),[filterMax,setFilterMax]=useState("");
+const[chatRooms,setChatRooms]=useState([]),[chatRoom,setChatRoom]=useState(null),[chatMsgs,setChatMsgs]=useState([]),[chatText,setChatText]=useState(""),[chatOther,setChatOther]=useState("");
+const fileRef=useRef(null);const chatEndRef=useRef(null);
+
+const goHome=()=>{setPg("home");setSel(null);setSelPost(null);setSelTx(null);setSok(false);setBOk(false)};
+const flash=m=>{setMsg(m);setTimeout(()=>setMsg(""),3000)};
+useEffect(()=>{document.body.style.background=t.bg;document.body.style.color=t.txt},[dark]);
+useEffect(()=>{const tk=localStorage.getItem("token");if(tk)api("/api/auth/me").then(d=>{if(d.name)setUser(d)});loadProducts();loadAuctions();loadPosts()},[]);
+useEffect(()=>{loadProducts()},[cat,sort,q,filterCond,filterMin,filterMax]);
+useEffect(()=>{loadPosts()},[postType]);
+useEffect(()=>{if(user)loadNotifs()},[user]);
+
+const loadProducts=()=>{let url="/api/products?brand="+(cat==="all"?"":cat)+"&sort="+sort+"&q="+q;if(filterCond)url+="&condition="+filterCond;if(filterMin)url+="&minPrice="+filterMin;if(filterMax)url+="&maxPrice="+filterMax;api(url).then(d=>{if(d.products)setProducts(d.products)})};
+const loadAuctions=()=>api("/api/auctions").then(d=>{if(d.auctions)setAuctions(d.auctions)});
+const loadPosts=()=>api("/api/community"+(postType!=="all"?"?type="+postType:"")).then(d=>{if(d.posts)setPosts(d.posts)});
+const loadMyTx=()=>api("/api/transactions/my").then(d=>{if(!d.error)setMyTx(d)});
+const loadTxDetail=id=>api("/api/transactions/"+id).then(d=>{if(!d.error)setSelTx(d)});
+const loadReward=()=>{if(user)api("/api/rewards/my").then(d=>{if(!d.error)setReward(d)});api("/api/rewards/shop").then(d=>{if(d.items)setShop(d.items)})};
+const loadNotifs=()=>api("/api/notifications").then(d=>{if(!d.error){setNotifs(d.notifications||[]);setUnread(d.unread_count||0)}});
+const markRead=()=>api("/api/notifications/read",{method:"POST"}).then(()=>{setUnread(0);loadNotifs()});
+const loadChatRooms=()=>api("/api/chat/rooms").then(d=>{if(d.rooms)setChatRooms(d.rooms)});
+const loadChatRoom=id=>api("/api/chat/room/"+id+"/messages").then(d=>{if(!d.error){setChatRoom(d.room);setChatMsgs(d.messages||[]);setChatOther(d.other_name);setTimeout(()=>{if(chatEndRef.current)chatEndRef.current.scrollIntoView({behavior:"smooth"})},100)}});
+const openChat=async(productId,sellerId)=>{if(!user)return setPg("auth");const d=await api("/api/chat/room",{method:"POST",body:JSON.stringify({product_id:productId,seller_id:sellerId})});if(d.room){loadChatRoom(d.room.id);setPg("chat-room")}};
+const sendChat=async()=>{if(!chatText||!chatRoom)return;await api("/api/chat/room/"+chatRoom.id+"/send",{method:"POST",body:JSON.stringify({content:chatText})});setChatText("");loadChatRoom(chatRoom.id)};
+
+const doAuth=async()=>{setAuthErr("");if(!af.email||!af.pw)return setAuthErr("이메일과 비밀번호 필수");if(authMode==="signup"&&!af.name)return setAuthErr("닉네임 필수");const d=await api("/api/auth/"+(authMode==="login"?"login":"signup"),{method:"POST",body:JSON.stringify({email:af.email,password:af.pw,name:af.name})});if(d.error)return setAuthErr(d.error);localStorage.setItem("token",d.token);setUser(d.user);setPg("home");flash("성공!")};
+const doLogout=()=>{localStorage.removeItem("token");setUser(null);flash("로그아웃")};
+const doSell=async()=>{if(!user)return setPg("auth");const fd=new FormData();fd.append("name",sf.name);fd.append("price",sf.price);fd.append("brand",sf.cat);fd.append("condition",sf.cond);fd.append("description",sf.desc);fd.append("original_price",Math.round(Number(sf.price)*1.3));if(sf.kakao)fd.append("kakao_link",sf.kakao);selImgs.forEach(f=>fd.append("images",f));const d=await apiUp("/api/products",fd);if(d.error)return flash(d.error);setSok(true);setSelImgs([]);setImgPrevs([]);loadProducts()};
+const doBuy=async()=>{if(!user)return setPg("auth");const d=await api("/api/products/"+sel.id+"/buy",{method:"POST",body:JSON.stringify({tx_type:txMode})});if(d.error)return flash(d.error);flash(txMode==="safe"?"안전거래 결제 완료!":"일반거래 시작!");goHome();loadProducts();loadMyTx()};
+const doBid=async()=>{if(!user)return setPg("auth");const d=await api("/api/auctions/"+sel.id+"/bid",{method:"POST",body:JSON.stringify({amount:Number(bAmt)})});if(d.error)return flash(d.error);setBOk(true);loadAuctions()};
+const doLike=async(id,ev)=>{ev.stopPropagation();if(!user)return setPg("auth");await api("/api/products/"+id+"/like",{method:"POST"});setLiked(p=>{const s=new Set(p);s.has(id)?s.delete(id):s.add(id);return s})};
+const doPost=async()=>{if(!user)return setPg("auth");if(!pf.title||!pf.content)return flash("제목과 내용 필수");await api("/api/community",{method:"POST",body:JSON.stringify(pf)});flash("등록!");setPg("home");setTab("community");loadPosts()};
+const doPostLike=async id=>{if(!user)return setPg("auth");await api("/api/community/"+id+"/like",{method:"POST"});if(selPost)api("/api/community/"+id).then(d=>{if(!d.error)setSelPost(d)});loadPosts()};
+const doCmt=async()=>{if(!user||!cmt)return;await api("/api/community/"+selPost.id+"/comment",{method:"POST",body:JSON.stringify({content:cmt})});setCmt("");api("/api/community/"+selPost.id).then(d=>{if(!d.error)setSelPost(d)})};
+const doShip=async()=>{const d=await api("/api/transactions/"+selTx.id+"/ship",{method:"POST",body:JSON.stringify({tracking_number:trackNum})});if(d.error)return flash(d.error);flash("배송 처리!");loadTxDetail(selTx.id);loadMyTx()};
+const doConfirm=async()=>{const d=await api("/api/transactions/"+selTx.id+"/confirm",{method:"POST"});if(d.error)return flash(d.error);flash(d.message);loadTxDetail(selTx.id);loadMyTx()};
+const doCancel=async()=>{const d=await api("/api/transactions/"+selTx.id+"/cancel",{method:"POST"});if(d.error)return flash(d.error);flash("거래 취소");loadTxDetail(selTx.id);loadMyTx()};
+const doClaim=async itemId=>{if(!user)return setPg("auth");const d=await api("/api/rewards/claim/"+itemId,{method:"POST"});if(d.error)return flash(d.error);flash(d.message);loadReward()};
+const doInquiry=async()=>{if(!user||!inqText)return;await api("/api/products/"+sel.id+"/inquiry",{method:"POST",body:JSON.stringify({content:inqText})});setInqText("");flash("문의 등록!");api("/api/products/"+sel.id).then(d=>{if(!d.error)setSel(d)})};
+const doReply=async(inqId)=>{if(!replyText)return;await api("/api/products/inquiry/"+inqId+"/reply",{method:"POST",body:JSON.stringify({content:replyText})});setReplyText("");flash("답변 완료!");api("/api/products/"+sel.id).then(d=>{if(!d.error)setSel(d)})};
+
+const onImgs=e=>{const files=Array.from(e.target.files).slice(0,5);setSelImgs(files);const readers=files.map(f=>new Promise(res=>{const r=new FileReader();r.onload=ev=>res(ev.target.result);r.readAsDataURL(f)}));Promise.all(readers).then(setImgPrevs)};
+
+const inp={width:"100%",padding:"13px 16px",borderRadius:12,border:"1px solid "+t.bdr,background:t.inp,color:t.txt,fontSize:14,fontFamily:"inherit",outline:"none"};
+const crd={background:t.card,borderRadius:16,border:"1px solid "+t.bdr,padding:18,marginBottom:12};
+const chip=(a)=>({padding:"8px 16px",borderRadius:10,border:"1px solid "+(a?G:t.bdr),background:a?G:"transparent",color:a?"#0a0a0a":t.sub,fontSize:13,fontWeight:a?600:400,cursor:"pointer"});
+const btn1={width:"100%",background:G,color:"#0a0a0a",border:"none",borderRadius:14,padding:15,fontSize:16,fontWeight:700,fontFamily:"inherit",cursor:"pointer",marginTop:10};
+const lbl={fontSize:13,fontWeight:600,color:t.sub,display:"block",marginBottom:8};
+
+// ===== HEADER with notification bell =====
+const Hdr=({back})=>(
+  <header style={{position:"sticky",top:0,zIndex:100,background:t.hdr,backdropFilter:"blur(24px)",borderBottom:"1px solid "+t.bdr}}>
+    <div style={{maxWidth:1100,margin:"0 auto",padding:"12px 20px",display:"flex",alignItems:"center",justifyContent:"space-between",gap:8}}>
+      {back?<button style={{background:"transparent",color:t.sub,border:"none",fontSize:14}} onClick={goHome}>← 뒤로</button>:<div/>}
+      <div onClick={goHome} style={{fontFamily:"'DM Serif Display',serif",fontSize:22,color:t.txt,letterSpacing:.5,cursor:"pointer"}}>WATCHA<span style={{color:G,marginLeft:3}}>MARKET</span></div>
+      {back?<div style={{display:"flex",gap:8}}><button onClick={()=>setDark(!dark)} style={{background:"transparent",border:"1px solid "+t.bdr,borderRadius:"50%",width:32,height:32,fontSize:14}}>{dark?"☀️":"🌙"}</button></div>:(
+        <nav style={{display:"flex",gap:6,flexWrap:"wrap",alignItems:"center"}}>
+          <button onClick={()=>setDark(!dark)} style={{background:"transparent",border:"1px solid "+t.bdr,borderRadius:"50%",width:32,height:32,fontSize:14}}>{dark?"☀️":"🌙"}</button>
+          {user&&<div style={{position:"relative"}}>
+            <button onClick={()=>{setShowNotif(!showNotif);if(!showNotif)markRead()}} style={{background:"transparent",border:"1px solid "+t.bdr,borderRadius:"50%",width:32,height:32,fontSize:14,position:"relative"}}>🔔{unread>0&&<span style={{position:"absolute",top:-2,right:-2,background:"#e74c3c",color:"#fff",fontSize:9,fontWeight:700,width:16,height:16,borderRadius:"50%",display:"flex",alignItems:"center",justifyContent:"center"}}>{unread}</span>}</button>
+            {showNotif&&<div style={{position:"absolute",right:0,top:40,width:300,maxHeight:400,overflowY:"auto",background:t.card,border:"1px solid "+t.bdr,borderRadius:12,zIndex:200,boxShadow:"0 8px 30px rgba(0,0,0,.3)"}}>
+              <div style={{padding:"12px 16px",borderBottom:"1px solid "+t.bdr,fontWeight:600,fontSize:14}}>알림</div>
+              {notifs.length===0&&<div style={{padding:20,textAlign:"center",color:t.mut,fontSize:13}}>알림이 없습니다</div>}
+              {notifs.slice(0,10).map((n,i)=><div key={i} style={{padding:"10px 16px",borderBottom:"1px solid "+t.sf,background:n.read?"transparent":(dark?"#1a1500":"#fffbf0")}}>
+                <div style={{fontSize:13,marginBottom:2}}>{n.message}</div>
+                <div style={{fontSize:11,color:t.mut}}>{ago(n.created_at)}</div>
+              </div>)}
+            </div>}
+          </div>}
+          <button onClick={()=>setPg("pass")} style={{background:"transparent",color:G,border:"1px solid "+t.bdr,padding:"6px 12px",borderRadius:10,fontSize:12,fontWeight:600}} className="hide-m">PASS</button>
+          {user&&<button onClick={()=>{loadMyTx();setPg("my-tx")}} style={{background:"transparent",color:t.sub,border:"1px solid "+t.bdr,padding:"6px 12px",borderRadius:10,fontSize:12}} className="hide-m">내 거래</button>}
+          {user&&<button onClick={()=>{loadChatRooms();setPg("chat-list")}} style={{background:"transparent",color:t.sub,border:"1px solid "+t.bdr,padding:"6px 12px",borderRadius:10,fontSize:12}} className="hide-m">💬 채팅</button>}
+          <button onClick={()=>{if(!user)setPg("auth");else setPg("sell")}} style={{background:G,color:"#0a0a0a",border:"none",padding:"6px 12px",borderRadius:10,fontSize:12,fontWeight:600}}>판매</button>
+          {user?<div style={{display:"flex",alignItems:"center",gap:6}}>
+            <div style={{width:28,height:28,borderRadius:"50%",background:G,display:"flex",alignItems:"center",justifyContent:"center",color:"#0a0a0a",fontWeight:700,fontSize:12}}>{user.name[0]}</div>
+            <button onClick={doLogout} style={{background:"transparent",color:t.mut,border:"none",fontSize:11}} className="hide-m">로그아웃</button>
+          </div>:<button onClick={()=>{setPg("auth");setAuthMode("login");setAuthErr("")}} style={{background:"transparent",color:t.sub,border:"1px solid "+t.bdr,padding:"6px 12px",borderRadius:10,fontSize:12}}>로그인</button>}
+        </nav>
+      )}
+    </div>
+  </header>
+);
+const Toast=()=>msg?<div style={{position:"fixed",top:80,left:"50%",transform:"translateX(-50%)",background:dark?"#222":"#fff",color:t.txt,padding:"12px 24px",borderRadius:12,fontSize:14,zIndex:200,border:"1px solid "+t.bdr,boxShadow:"0 4px 20px rgba(0,0,0,.2)"}}>{msg}</div>:null;
+// ===== Guarantee Badge =====
+const GuaranteeBadge=()=><div style={{background:dark?"#0d1a0d":"#eaf5ea",border:"1px solid #27ae6033",borderRadius:12,padding:"10px 14px",marginBottom:12,display:"flex",alignItems:"center",gap:8}}><span style={{fontSize:18}}>🛡️</span><span style={{fontSize:13,color:"#27ae60",fontWeight:600}}>WATCHA 안전거래 보증 — 상품이 설명과 다르면 100% 환불</span></div>;
+
+// ===== CHAT LIST =====
+if(pg==="chat-list")return(<div style={{background:t.bg,minHeight:"100vh"}}><Hdr back/><Toast/><main style={{maxWidth:680,margin:"0 auto",padding:"0 24px 80px"}}><h1 style={{fontSize:24,fontWeight:700,marginTop:32,marginBottom:20}}>💬 채팅</h1>{chatRooms.length===0&&<div style={{textAlign:"center",padding:"60px 20px",color:t.mut}}><div style={{fontSize:48,marginBottom:12}}>💬</div>채팅 내역이 없습니다</div>}{chatRooms.map(r=><div key={r.id} onClick={()=>{loadChatRoom(r.id);setPg("chat-room")}} style={{...crd,cursor:"pointer",display:"flex",alignItems:"center",gap:14}}><div style={{width:44,height:44,borderRadius:"50%",background:t.sf,display:"flex",alignItems:"center",justifyContent:"center",fontWeight:700,fontSize:16,color:G,flexShrink:0}}>{(r.other_name||"?")[0]}</div><div style={{flex:1,minWidth:0}}><div style={{display:"flex",justifyContent:"space-between",marginBottom:4}}><span style={{fontWeight:600,fontSize:14}}>{r.other_name}</span><span style={{fontSize:11,color:t.mut}}>{ago(r.last_time)}</span></div><div style={{fontSize:12,color:t.mut,marginBottom:2}}>{r.product_name}</div><div style={{fontSize:13,color:t.sub,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{r.last_message||"대화를 시작하세요"}</div></div>{r.unread>0&&<div style={{width:22,height:22,borderRadius:"50%",background:"#e74c3c",color:"#fff",fontSize:11,fontWeight:700,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>{r.unread}</div>}</div>)}</main></div>);
+
+// ===== CHAT ROOM =====
+if(pg==="chat-room"&&chatRoom)return(<div style={{background:t.bg,minHeight:"100vh",display:"flex",flexDirection:"column"}}><Hdr back/><Toast/>
+<div style={{background:t.card,borderBottom:"1px solid "+t.bdr,padding:"12px 24px"}}><div style={{maxWidth:680,margin:"0 auto",display:"flex",alignItems:"center",gap:12}}><div style={{width:36,height:36,borderRadius:"50%",background:t.sf,display:"flex",alignItems:"center",justifyContent:"center",fontWeight:700,fontSize:14,color:G}}>{(chatOther||"?")[0]}</div><div><div style={{fontWeight:600,fontSize:14}}>{chatOther}</div><div style={{fontSize:12,color:t.mut}}>{chatRoom.product_name}</div></div></div></div>
+<main style={{flex:1,maxWidth:680,margin:"0 auto",width:"100%",padding:"16px 24px",overflowY:"auto"}}>
+{chatMsgs.length===0&&<div style={{textAlign:"center",padding:"40px 20px",color:t.mut,fontSize:13}}>대화를 시작하세요! 상품에 대해 문의해보세요.</div>}
+{chatMsgs.map((m,i)=>{const mine=m.sender_id===user.id;return(<div key={i} style={{display:"flex",justifyContent:mine?"flex-end":"flex-start",marginBottom:10}}><div style={{maxWidth:"70%",padding:"10px 14px",borderRadius:mine?"16px 16px 4px 16px":"16px 16px 16px 4px",background:mine?G:t.card,color:mine?"#0a0a0a":t.txt,border:mine?"none":"1px solid "+t.bdr}}><div style={{fontSize:14,lineHeight:1.5}}>{m.content}</div><div style={{fontSize:10,color:mine?"#0a0a0a88":t.mut,marginTop:4,textAlign:mine?"right":"left"}}>{ago(m.created_at)}</div></div></div>)})}
+<div ref={chatEndRef}/>
+</main>
+<div style={{borderTop:"1px solid "+t.bdr,background:t.card,padding:"12px 24px"}}><div style={{maxWidth:680,margin:"0 auto",display:"flex",gap:10}}><input value={chatText} onChange={e=>setChatText(e.target.value)} placeholder="메시지를 입력하세요..." style={{...inp,flex:1}} onKeyDown={e=>{if(e.key==="Enter")sendChat()}}/><button onClick={sendChat} style={{padding:"13px 24px",borderRadius:12,border:"none",background:G,color:"#0a0a0a",fontSize:14,fontWeight:700,flexShrink:0}}>전송</button></div></div>
+</div>);
+
+// ===== AUTH =====
+if(pg==="auth")return(<div style={{background:t.bg,minHeight:"100vh"}}><Hdr back/><Toast/><main style={{maxWidth:420,margin:"0 auto",padding:"0 24px 80px"}}><div style={{textAlign:"center",padding:"60px 0 32px"}}><div style={{fontSize:40,marginBottom:16}}>⌚</div><h1 style={{fontSize:24,fontWeight:700}}>{authMode==="login"?"로그인":"회원가입"}</h1></div><div style={crd}><div style={{display:"flex",flexDirection:"column",gap:16}}>{authMode==="signup"&&<div><label style={lbl}>닉네임</label><input style={inp} placeholder="예: 시계덕후" value={af.name} onChange={e=>setAf({...af,name:e.target.value})}/></div>}<div><label style={lbl}>이메일</label><input style={inp} type="email" placeholder="example@email.com" value={af.email} onChange={e=>setAf({...af,email:e.target.value})}/></div><div><label style={lbl}>비밀번호</label><input style={inp} type="password" placeholder={authMode==="login"?"비밀번호":"6자 이상"} value={af.pw} onChange={e=>setAf({...af,pw:e.target.value})} onKeyDown={e=>{if(e.key==="Enter")doAuth()}}/></div>{authErr&&<p style={{fontSize:13,color:"#e74c3c"}}>{authErr}</p>}<button onClick={doAuth} style={btn1}>{authMode==="login"?"로그인":"가입하기"}</button></div><div style={{textAlign:"center",marginTop:20,paddingTop:20,borderTop:"1px solid "+t.bdr}}><button onClick={()=>{setAuthMode(authMode==="login"?"signup":"login");setAuthErr("")}} style={{background:"none",border:"none",color:G,fontSize:13,cursor:"pointer",textDecoration:"underline"}}>{authMode==="login"?"회원가입":"로그인"}</button></div></div></main></div>);
+
+// ===== PASS =====
+if(pg==="pass")return(<div style={{background:t.bg,minHeight:"100vh"}}><Hdr back/><Toast/><main style={{maxWidth:960,margin:"0 auto",padding:"0 24px 80px"}}><div style={{textAlign:"center",padding:"48px 0 12px"}}><div style={{fontSize:13,color:G,fontWeight:600,letterSpacing:2,marginBottom:8}}>WATCHA PASS</div><h1 style={{fontSize:28,fontWeight:900,marginBottom:10}}>나에게 맞는 플랜</h1></div><div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(260px,1fr))",gap:16,marginTop:24}} className="col-m">{TIERS.map(tr=><div key={tr.id} style={{...crd,border:tr.pop?"2px solid "+tr.color:"1px solid "+t.bdr,position:"relative"}}>{tr.pop&&<div style={{position:"absolute",top:-12,left:"50%",transform:"translateX(-50%)",background:tr.color,color:"#fff",fontSize:11,fontWeight:700,padding:"4px 16px",borderRadius:20}}>추천</div>}<div style={{fontSize:12,fontWeight:600,color:tr.color,letterSpacing:2,marginBottom:4}}>WATCHA {tr.name}</div><div style={{fontSize:13,color:t.sub,marginBottom:16}}>{tr.who}</div><div style={{display:"flex",alignItems:"baseline",gap:4,marginBottom:20}}><span style={{fontSize:34,fontWeight:700}}>{tr.price.toLocaleString()}</span><span style={{fontSize:14,color:t.mut}}>원/월</span></div><div style={{borderTop:"1px solid "+t.bdr,paddingTop:16}}>{tr.feats.map((f,i)=><div key={i} style={{display:"flex",alignItems:"center",gap:10,padding:"7px 0",fontSize:13,color:t.sub}}><span style={{width:18,height:18,borderRadius:"50%",background:tr.bg,color:tr.tx,fontSize:11,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>✓</span>{f}</div>)}</div><button onClick={async()=>{if(!user)return setPg("auth");const d=await api("/api/pass/subscribe",{method:"POST",body:JSON.stringify({tier:tr.id})});flash(d.message||d.error)}} style={{width:"100%",marginTop:20,padding:13,borderRadius:12,border:"none",background:tr.pop?tr.color:t.bdr,color:tr.pop?"#fff":t.sub,fontSize:14,fontWeight:700}}>{tr.name} 시작하기</button></div>)}</div></main></div>);
+
+// ===== SELL (multi-image + checklist + kakao) =====
+if(pg==="sell")return(<div style={{background:t.bg,minHeight:"100vh"}}><Hdr back/><Toast/><main style={{maxWidth:560,margin:"0 auto",padding:"0 24px 80px"}}>{sok?<div style={{textAlign:"center",padding:"90px 20px"}}><div style={{fontSize:56,marginBottom:16}}>🎉</div><h2 style={{color:G,fontSize:24}}>등록 완료!</h2><button style={btn1} onClick={goHome}>홈으로</button></div>:<div><h2 style={{fontSize:26,fontWeight:700,marginTop:36,marginBottom:6}}>⌚ 시계 판매 등록</h2><p style={{color:G,fontSize:13,marginBottom:32}}>💰 판매자 수수료 0%</p><div style={{display:"flex",flexDirection:"column",gap:18}}>
+<div><label style={lbl}>📷 상품 사진 (최대 5장)</label><input ref={fileRef} type="file" accept="image/*" multiple onChange={onImgs} style={{display:"none"}}/>{imgPrevs.length>0?<div style={{display:"flex",gap:8,overflowX:"auto",marginBottom:8}}>{imgPrevs.map((p,i)=><div key={i} style={{width:100,height:100,borderRadius:10,overflow:"hidden",flexShrink:0}}><img src={p} style={{width:"100%",height:"100%",objectFit:"cover"}}/></div>)}<button onClick={()=>fileRef.current&&fileRef.current.click()} style={{width:100,height:100,borderRadius:10,border:"2px dashed "+t.bdr,background:t.sf,display:"flex",alignItems:"center",justifyContent:"center",fontSize:24,color:t.mut,flexShrink:0}}>+</button></div>:<button onClick={()=>fileRef.current&&fileRef.current.click()} style={{width:"100%",height:120,borderRadius:14,border:"2px dashed "+t.bdr,background:t.sf,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:8,color:t.mut,fontSize:14}}><span style={{fontSize:32}}>📷</span>사진 첨부하기 (선택)</button>}</div>
+<div style={{background:t.sf,borderRadius:12,padding:"12px 16px"}}><div style={{fontSize:12,color:t.sub,marginBottom:6}}>📸 사진 촬영 가이드</div><div style={{fontSize:12,color:t.mut,lineHeight:1.6}}>밝은 곳에서 촬영 · 정면/뒷면/측면 · 스크래치 부분 클로즈업 · 구성품(박스/보증서) 포함</div></div>
+<div><label style={lbl}>상품명</label><input style={inp} placeholder="예: 카시오 G-SHOCK GA-2100" value={sf.name} onChange={e=>setSf({...sf,name:e.target.value})}/></div>
+<div><label style={lbl}>판매가격 (원)</label><input style={inp} placeholder="예: 89000" type="number" value={sf.price} onChange={e=>setSf({...sf,price:e.target.value})}/></div>
+<div><label style={lbl}>브랜드</label><div style={{display:"flex",gap:8,flexWrap:"wrap"}}>{BRANDS.filter(c=>c.id!=="all").map(c=><button key={c.id} style={chip(sf.cat===c.id)} onClick={()=>setSf({...sf,cat:c.id})}>{c.icon} {c.label}</button>)}</div></div>
+<div><label style={lbl}>상품 상태</label><div style={{display:"flex",gap:8}}>{["S급","A급","B급","C급"].map(c=><button key={c} style={chip(sf.cond===c)} onClick={()=>setSf({...sf,cond:c})}>{c}</button>)}</div></div>
+<div><label style={lbl}>설명</label><textarea style={{...inp,resize:"vertical",minHeight:100}} placeholder="구매 시기, 사용 횟수, 스크래치 여부 등" value={sf.desc} onChange={e=>setSf({...sf,desc:e.target.value})}/></div>
+<div><label style={lbl}>카카오톡 오픈채팅 링크 (선택)</label><input style={inp} placeholder="https://open.kakao.com/..." value={sf.kakao} onChange={e=>setSf({...sf,kakao:e.target.value})}/><div style={{fontSize:11,color:t.mut,marginTop:4}}>구매자가 바로 연락할 수 있어요</div></div>
+<button style={{...btn1,opacity:sf.name&&sf.price?1:.3}} onClick={doSell}>등록하기</button></div></div>}</main></div>);
+
+// ===== PRODUCT DETAIL (reviews + inquiries + guarantee + kakao) =====
+if(pg==="detail"&&sel){const rate=sel.fee_rate||0,fee=sel.fee_amount||0;return(<div style={{background:t.bg,minHeight:"100vh"}}><Hdr back/><Toast/><main style={{maxWidth:680,margin:"0 auto",padding:"0 24px 80px"}}>
+{sel.image_url&&<div style={{marginTop:20,borderRadius:18,overflow:"hidden",height:260}}><img src={sel.image_url} style={{width:"100%",height:"100%",objectFit:"cover"}} onError={e=>{e.target.parentElement.style.display="none"}}/></div>}
+<GuaranteeBadge/>
+<div style={{display:"flex",alignItems:"center",gap:10,margin:"16px 0",paddingBottom:16,borderBottom:"1px solid "+t.bdr}}>
+  <div style={{width:40,height:40,borderRadius:"50%",background:t.sf,display:"flex",alignItems:"center",justifyContent:"center",fontWeight:700,fontSize:15,color:G}}>{(sel.seller_name||"?")[0]}</div>
+  <div><div style={{fontWeight:600,fontSize:14}}>{sel.seller_name} <span style={{fontSize:11,color:sel.seller_level?.color||t.mut}}>{sel.seller_level?.name||""}</span></div>
+  {sel.seller_rating>0&&<div style={{fontSize:12,color:t.mut}}>⭐ {sel.seller_rating} ({sel.seller_review_count}건 후기)</div>}</div>
+  {sel.seller_kakao&&<a href={sel.seller_kakao} target="_blank" style={{marginLeft:"auto",padding:"6px 14px",borderRadius:8,background:"#FEE500",color:"#3C1E1E",fontSize:12,fontWeight:600,textDecoration:"none"}}>💬 카카오톡</a>}
+</div>
+<div style={{fontSize:11,color:t.mut,marginBottom:6}}>{bI(sel.brand)} {bL(sel.brand)}</div>
+<h1 style={{fontSize:22,fontWeight:700,marginBottom:14,lineHeight:1.3}}>{sel.name}</h1>
+{sel.original_price&&<div style={{display:"flex",alignItems:"baseline",gap:10}}><span style={{color:"#e74c3c",fontSize:22,fontWeight:700}}>{pc(sel.original_price,sel.price)}%</span><span style={{fontSize:28,fontWeight:700}}>{fF(sel.price)}</span></div>}
+<div style={{...crd,marginTop:20}}><p style={{fontSize:14,color:t.sub,lineHeight:1.8}}>{sel.description||"설명 없음"}</p></div>
+{/* 거래 방식 */}
+<div style={{marginBottom:20}}><div style={{fontSize:14,fontWeight:600,marginBottom:12}}>거래 방식</div><div style={{display:"flex",gap:10}} className="col-m"><button onClick={()=>setTxMode("safe")} style={{flex:1,padding:16,borderRadius:14,border:txMode==="safe"?"2px solid "+G:"1px solid "+t.bdr,background:txMode==="safe"?G+"10":t.sf,textAlign:"left"}}><div style={{fontSize:14,fontWeight:700,color:txMode==="safe"?G:t.sub,marginBottom:6}}>🛡️ 안전거래</div><div style={{fontSize:13,fontWeight:700,color:txMode==="safe"?G:t.sub,marginTop:8}}>{rate===0?"무료":"수수료 "+rate+"%"}</div></button><button onClick={()=>setTxMode("normal")} style={{flex:1,padding:16,borderRadius:14,border:txMode==="normal"?"2px solid "+t.mut:"1px solid "+t.bdr,background:txMode==="normal"?t.card:t.sf,textAlign:"left"}}><div style={{fontSize:14,fontWeight:700,color:txMode==="normal"?t.txt:t.sub,marginBottom:6}}>💬 일반거래</div><div style={{fontSize:13,fontWeight:700,color:"#27ae60",marginTop:8}}>수수료 없음</div><div style={{fontSize:12,color:"#e74c3c",marginTop:4}}>⚠️ 보호 없음</div></button></div></div>
+<button onClick={()=>{if(txMode==="safe")doBuy();else openChat(sel.id,sel.seller_id)}} style={{...btn1,background:txMode==="safe"?G:"#333",color:txMode==="safe"?"#0a0a0a":"#fff"}}>{txMode==="safe"?"🛡️ 안전거래 ("+fF(sel.price+fee)+")":"💬 채팅하기"}</button>
+{/* 안전거래에서도 채팅 가능 */}
+{txMode==="safe"&&<button onClick={()=>openChat(sel.id,sel.seller_id)} style={{...btn1,background:"transparent",border:"1px solid "+t.bdr,color:t.sub,marginTop:8}}>💬 판매자와 채팅하기</button>}
+{/* 판매자 후기 */}
+{sel.seller_reviews&&sel.seller_reviews.length>0&&<div style={{marginTop:24}}><div style={{fontSize:15,fontWeight:600,marginBottom:12}}>⭐ 판매자 후기</div>{sel.seller_reviews.map((r,i)=><div key={i} style={{...crd,padding:14}}><div style={{display:"flex",justifyContent:"space-between",marginBottom:4}}><span style={{fontSize:13,fontWeight:600}}>{r.reviewer_name}</span><span style={{fontSize:13,color:"#E67E22"}}>{"⭐".repeat(r.rating)}</span></div><p style={{fontSize:13,color:t.sub}}>{r.content}</p></div>)}</div>}
+{/* 문의 게시판 */}
+<div style={{marginTop:24,borderTop:"1px solid "+t.bdr,paddingTop:20}}><div style={{fontSize:15,fontWeight:600,marginBottom:12}}>💬 상품 문의 ({(sel.inquiries||[]).length})</div>
+{(sel.inquiries||[]).map((inq,i)=><div key={i} style={{...crd,padding:14}}><div style={{fontSize:13,fontWeight:600,marginBottom:4}}>{inq.author_name}</div><p style={{fontSize:13,color:t.sub}}>{inq.content}</p>{inq.reply&&<div style={{marginTop:8,padding:"8px 12px",background:t.sf,borderRadius:8}}><span style={{fontSize:11,color:G,fontWeight:600}}>판매자 답변: </span><span style={{fontSize:13,color:t.sub}}>{inq.reply}</span></div>}{!inq.reply&&sel.seller_id===user?.id&&<div style={{marginTop:8,display:"flex",gap:8}}><input value={replyText} onChange={e=>setReplyText(e.target.value)} placeholder="답변 입력" style={{...inp,flex:1,padding:"8px 12px",fontSize:12}}/><button onClick={()=>doReply(inq.id)} style={{padding:"8px 16px",borderRadius:8,border:"none",background:G,color:"#0a0a0a",fontSize:12,fontWeight:600}}>답변</button></div>}</div>)}
+<div style={{display:"flex",gap:8,marginTop:8}}><input value={inqText} onChange={e=>setInqText(e.target.value)} placeholder={user?"문의 내용을 입력하세요":"로그인 후 문의 가능"} style={{...inp,flex:1}} onKeyDown={e=>{if(e.key==="Enter")doInquiry()}}/><button onClick={doInquiry} style={{padding:"13px 20px",borderRadius:12,border:"none",background:G,color:"#0a0a0a",fontSize:14,fontWeight:700}}>문의</button></div></div>
+</main></div>)}
+
+// ===== TX DETAIL =====
+if(pg==="tx-detail"&&selTx){const tl=selTx.timeline||[];return(<div style={{background:t.bg,minHeight:"100vh"}}><Hdr back/><Toast/><main style={{maxWidth:600,margin:"0 auto",padding:"0 24px 80px"}}><div style={{textAlign:"center",padding:"32px 0 24px"}}><div style={{fontSize:13,color:G,fontWeight:600,marginBottom:8}}>🛡️ 안전거래</div><h1 style={{fontSize:22,fontWeight:700,marginBottom:6}}>{selTx.product_name}</h1><p style={{fontSize:20,fontWeight:700,color:G}}>{fF(selTx.price)}</p></div><div style={{...crd,textAlign:"center"}}><div style={{fontSize:15,fontWeight:600,color:selTx.status==="settled"?"#27ae60":selTx.status==="cancelled"?"#e74c3c":t.txt}}>{selTx.status_text}</div></div><div style={crd}><div style={{fontSize:14,fontWeight:600,marginBottom:16}}>진행 상황</div>{tl.map((step,i)=><div key={i} style={{display:"flex",alignItems:"flex-start",gap:14}}><div style={{display:"flex",flexDirection:"column",alignItems:"center"}}><div style={{width:36,height:36,borderRadius:"50%",background:step.done?"#27ae6020":t.sf,border:step.done?"2px solid #27ae60":"2px solid "+t.bdr,display:"flex",alignItems:"center",justifyContent:"center",fontSize:16}}>{step.done?step.icon:"⏳"}</div>{i<tl.length-1&&<div style={{width:2,height:32,background:step.done?"#27ae6040":t.bdr,margin:"4px 0"}}/>}</div><div style={{paddingTop:6,paddingBottom:i<tl.length-1?16:0}}><div style={{fontSize:14,fontWeight:step.done?600:400,color:step.done?t.txt:t.mut}}>{step.step}</div>{step.time&&<div style={{fontSize:12,color:t.mut,marginTop:2}}>{ago(step.time)}</div>}</div></div>)}</div>{selTx.next_action&&selTx.next_action.action==="ship"&&<div style={crd}><div style={{fontSize:14,fontWeight:600,marginBottom:12}}>📦 배송 처리</div><input value={trackNum} onChange={e=>setTrackNum(e.target.value)} placeholder="운송장 번호 (선택)" style={{...inp,marginBottom:10}}/><button onClick={doShip} style={{...btn1,background:"#2980b9",marginTop:0}}>배송 시작</button></div>}{selTx.next_action&&selTx.next_action.action==="confirm"&&<button onClick={doConfirm} style={{...btn1,background:"#27ae60"}}>✅ 수령 확인</button>}{(selTx.status==="paid"||selTx.status==="shipped")&&<button onClick={doCancel} style={{...btn1,background:"transparent",border:"1px solid #e74c3c",color:"#e74c3c"}}>거래 취소</button>}
+<button onClick={()=>openChat(selTx.product_id,selTx.role==="buyer"?selTx.seller_id:selTx.buyer_id)} style={{...btn1,background:"transparent",border:"1px solid "+t.bdr,color:t.sub}}>💬 {selTx.role==="buyer"?"판매자":"구매자"}와 채팅하기</button></main></div>)}
+
+// ===== MY TX =====
+if(pg==="my-tx"){const list=txTab==="buying"?myTx.buying:myTx.selling;const sc=s=>({settled:"#27ae60",cancelled:"#e74c3c",shipped:"#2980b9",paid:G}[s]||"#888");const sl=s=>({paid:"결제완료",shipped:"배송중",received:"수령확인",settled:"거래완료",cancelled:"취소",direct_contact:"일반거래"}[s]||s);return(<div style={{background:t.bg,minHeight:"100vh"}}><Hdr back/><Toast/><main style={{maxWidth:680,margin:"0 auto",padding:"0 24px 80px"}}><h1 style={{fontSize:24,fontWeight:700,marginTop:32,marginBottom:20}}>📋 내 거래</h1><div style={{display:"flex",gap:4,marginBottom:20,background:t.card,borderRadius:12,padding:4,border:"1px solid "+t.bdr}}><button onClick={()=>setTxTab("buying")} style={{flex:1,padding:10,borderRadius:10,border:"none",fontSize:14,fontWeight:600,background:txTab==="buying"?G:"transparent",color:txTab==="buying"?"#0a0a0a":t.mut}}>구매</button><button onClick={()=>setTxTab("selling")} style={{flex:1,padding:10,borderRadius:10,border:"none",fontSize:14,fontWeight:600,background:txTab==="selling"?G:"transparent",color:txTab==="selling"?"#0a0a0a":t.mut}}>판매</button></div>{list.length===0&&<div style={{textAlign:"center",padding:"60px 20px",color:t.mut}}>내역 없음</div>}{list.map(tx=><div key={tx.id} onClick={()=>{if(tx.tx_type==="safe"){loadTxDetail(tx.id);setPg("tx-detail")}}} style={{...crd,cursor:tx.tx_type==="safe"?"pointer":"default"}}><div style={{display:"flex",justifyContent:"space-between",marginBottom:8}}><span style={{padding:"3px 10px",borderRadius:8,fontSize:12,fontWeight:600,background:sc(tx.status)+"20",color:sc(tx.status)}}>{sl(tx.status)}</span><span style={{fontSize:12,color:t.mut}}>{ago(tx.created_at)}</span></div><div style={{fontSize:15,fontWeight:600,marginBottom:4}}>{tx.product_name}</div><div style={{fontSize:18,fontWeight:700,color:G}}>{fF(tx.price)}</div></div>)}</main></div>)}
+
+// ===== WRITE / POST DETAIL / AUC DETAIL =====
+if(pg==="write")return(<div style={{background:t.bg,minHeight:"100vh"}}><Hdr back/><Toast/><main style={{maxWidth:560,margin:"0 auto",padding:"0 24px 80px"}}><h2 style={{fontSize:26,fontWeight:700,marginTop:36,marginBottom:24}}>✍️ 글 쓰기</h2><div style={{display:"flex",flexDirection:"column",gap:18}}><div><label style={lbl}>카테고리</label><div style={{display:"flex",gap:8}}>{PT.filter(p=>p.id!=="all").map(p=><button key={p.id} style={chip(pf.type===p.id)} onClick={()=>setPf({...pf,type:p.id})}>{p.icon} {p.label}</button>)}</div></div><div><label style={lbl}>제목</label><input style={inp} placeholder="제목" value={pf.title} onChange={e=>setPf({...pf,title:e.target.value})}/></div><div><label style={lbl}>내용</label><textarea style={{...inp,resize:"vertical",minHeight:150}} placeholder="시계 이야기" value={pf.content} onChange={e=>setPf({...pf,content:e.target.value})}/></div><button style={{...btn1,opacity:pf.title&&pf.content?1:.3}} onClick={doPost}>등록하기</button></div></main></div>);
+if(pg==="post-detail"&&selPost)return(<div style={{background:t.bg,minHeight:"100vh"}}><Hdr back/><Toast/><main style={{maxWidth:680,margin:"0 auto",padding:"0 24px 80px"}}><h1 style={{fontSize:24,fontWeight:700,marginTop:32,marginBottom:8,lineHeight:1.4}}>{selPost.title}</h1><div style={{display:"flex",gap:12,fontSize:13,color:t.mut,marginBottom:24}}><span>{selPost.author_name}</span><span>{ago(selPost.created_at)}</span></div><div style={{fontSize:15,color:t.sub,lineHeight:2,marginBottom:24,whiteSpace:"pre-wrap"}}>{selPost.content}</div><button onClick={()=>doPostLike(selPost.id)} style={{padding:"10px 20px",borderRadius:10,border:"1px solid "+t.bdr,background:"transparent",color:t.sub,fontSize:13,marginBottom:24}}>{selPost.is_liked?"❤️":"🤍"} {selPost.like_count||0}</button><div style={{borderTop:"1px solid "+t.bdr,paddingTop:20}}><h3 style={{fontSize:15,fontWeight:600,marginBottom:16}}>💬 댓글 {(selPost.comments||[]).length}</h3>{(selPost.comments||[]).map((c,i)=><div key={i} style={{padding:"12px 0",borderBottom:"1px solid "+t.sf}}><div style={{fontSize:13,fontWeight:600,marginBottom:4}}>{c.author_name} <span style={{fontWeight:400,color:t.mut,marginLeft:8}}>{ago(c.created_at)}</span></div><p style={{fontSize:14,color:t.sub}}>{c.content}</p></div>)}<div style={{display:"flex",gap:10,marginTop:16}}><input value={cmt} onChange={e=>setCmt(e.target.value)} placeholder="댓글" style={{...inp,flex:1}} onKeyDown={e=>{if(e.key==="Enter")doCmt()}}/><button onClick={doCmt} style={{padding:"13px 20px",borderRadius:12,border:"none",background:G,color:"#0a0a0a",fontSize:14,fontWeight:700}}>등록</button></div></div></main></div>);
+if(pg==="auc-d"&&sel)return(<div style={{background:t.bg,minHeight:"100vh"}}><Hdr back/><Toast/><main style={{maxWidth:680,margin:"0 auto",padding:"0 24px 80px"}}><h1 style={{fontSize:22,fontWeight:700,marginTop:32,marginBottom:16}}>{sel.name}</h1><div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:20}} className="col-m"><div style={crd}><div style={{fontSize:12,color:t.mut}}>현재 최고가</div><div style={{fontSize:24,fontWeight:700,color:"#c0392b"}}>{fS(sel.current_bid||sel.start_price)}</div></div><div style={crd}><div style={{fontSize:12,color:t.mut}}>입찰</div><div style={{fontSize:24,fontWeight:700,color:t.sub}}>{(sel.bid_count||0)}회</div></div></div><div style={crd}><p style={{fontSize:14,color:t.sub,lineHeight:1.8}}>{sel.description}</p></div><div style={{...crd,fontSize:13,color:t.sub}}>📌 낙찰 수수료 5% (구매자 부담)</div>{bOk?<div style={{textAlign:"center",padding:40}}><div style={{fontSize:48}}>🎉</div><h2 style={{color:G,marginTop:12}}>입찰 완료!</h2></div>:<div style={{display:"flex",gap:10,marginTop:20}}><input value={bAmt} onChange={e=>setBAmt(e.target.value)} type="number" placeholder="입찰 금액" style={{...inp,flex:1}}/><button onClick={doBid} style={{padding:"14px 28px",borderRadius:12,border:"none",background:"#c0392b",color:"#fff",fontSize:15,fontWeight:700}}>입찰</button></div>}</main></div>);
+
+// ===== HOME =====
+return(<div style={{background:t.bg,minHeight:"100vh"}} onClick={()=>setShowNotif(false)}><Hdr/><Toast/>
+<main style={{maxWidth:1100,margin:"0 auto",padding:"0 24px 120px"}}>
+<section style={{textAlign:"center",padding:"48px 20px 32px"}}><h1 style={{fontSize:"clamp(26px,5vw,42px)",fontWeight:900,lineHeight:1.15,marginBottom:10}}>첫 시계부터, <span style={{color:G}}>다음 시계까지</span></h1><p style={{fontSize:14,color:t.sub,marginBottom:28}}>10~20대를 위한 시계 전문 중고거래 플랫폼</p><div style={{maxWidth:500,margin:"0 auto 24px",position:"relative"}}><span style={{position:"absolute",left:18,top:"50%",transform:"translateY(-50%)",fontSize:15,opacity:.6}}>🔍</span><input value={q} onChange={e=>setQ(e.target.value)} placeholder="브랜드, 모델명 검색..." style={{width:"100%",padding:"14px 48px",border:"1px solid "+t.bdr,borderRadius:16,background:t.inp,color:t.txt,fontSize:14,fontFamily:"inherit",outline:"none"}}/></div></section>
+{/* Tabs */}
+<div style={{display:"flex",gap:4,marginBottom:16,background:t.card,borderRadius:14,padding:4,border:"1px solid "+t.bdr}}>
+<button onClick={()=>setTab("buy")} style={{flex:1,padding:11,borderRadius:12,border:"none",fontSize:13,fontWeight:600,background:tab==="buy"?G:"transparent",color:tab==="buy"?"#0a0a0a":t.mut}}>⌚ 구매</button>
+<button onClick={()=>{setTab("auction");loadAuctions()}} style={{flex:1,padding:11,borderRadius:12,border:"none",fontSize:13,fontWeight:600,background:tab==="auction"?"#c0392b":"transparent",color:tab==="auction"?"#fff":t.mut}}>🔨 경매</button>
+<button onClick={()=>{setTab("community");loadPosts()}} style={{flex:1,padding:11,borderRadius:12,border:"none",fontSize:13,fontWeight:600,background:tab==="community"?"#8E44AD":"transparent",color:tab==="community"?"#fff":t.mut}}>💬 커뮤니티</button>
+<button onClick={()=>{setTab("reward");loadReward()}} style={{flex:1,padding:11,borderRadius:12,border:"none",fontSize:13,fontWeight:600,background:tab==="reward"?"#E67E22":"transparent",color:tab==="reward"?"#fff":t.mut}}>🎁 리워드</button>
+</div>
+
+{/* BUY TAB with advanced filters */}
+{tab==="buy"&&<div>
+<div style={{display:"flex",gap:8,overflowX:"auto",paddingBottom:10,marginBottom:8}}>{BRANDS.map(c=><button key={c.id} onClick={()=>setCat(c.id)} style={{flexShrink:0,padding:"9px 20px",borderRadius:26,fontSize:13,fontWeight:cat===c.id?600:500,border:"1px solid "+(cat===c.id?G:t.bdr),background:cat===c.id?G:"transparent",color:cat===c.id?"#0a0a0a":t.sub,whiteSpace:"nowrap"}}>{c.id!=="all"?c.icon+" ":""}{c.label}</button>)}</div>
+{/* Advanced Filters */}
+<div style={{display:"flex",gap:8,marginBottom:14,flexWrap:"wrap",alignItems:"center"}}>
+<select value={filterCond} onChange={e=>setFilterCond(e.target.value)} style={{...inp,width:"auto",padding:"8px 12px",fontSize:12}}><option value="">상태 전체</option><option value="S급">S급</option><option value="A급">A급</option><option value="B급">B급</option></select>
+<input type="number" value={filterMin} onChange={e=>setFilterMin(e.target.value)} placeholder="최소 가격" style={{...inp,width:110,padding:"8px 12px",fontSize:12}}/>
+<span style={{fontSize:12,color:t.mut}}>~</span>
+<input type="number" value={filterMax} onChange={e=>setFilterMax(e.target.value)} placeholder="최대 가격" style={{...inp,width:110,padding:"8px 12px",fontSize:12}}/>
+<select value={sort} onChange={e=>setSort(e.target.value)} style={{...inp,width:"auto",padding:"8px 12px",fontSize:12}}><option value="latest">최신순</option><option value="low">낮은가격</option><option value="high">높은가격</option><option value="popular">인기순</option><option value="discount">할인율순</option></select>
+<span style={{fontSize:12,color:t.mut,marginLeft:"auto"}}>{products.length}개</span>
+</div>
+<div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(240px,1fr))",gap:16}} className="col-m">{products.map(p=>{const r=p.fee_rate||0;return(<div key={p.id} onClick={()=>{api("/api/products/"+p.id).then(d=>{if(!d.error){setSel(d);setPg("detail");setTxMode("safe")}})}} style={{...crd,cursor:"pointer",padding:0,overflow:"hidden"}}>
+{p.image_url&&<div style={{height:160,overflow:"hidden"}}><img src={p.image_url} style={{width:"100%",height:"100%",objectFit:"cover"}} onError={e=>{e.target.parentElement.style.display="none"}}/></div>}
+<div style={{padding:"14px 16px 16px"}}><div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:5}}><span style={{fontSize:11,color:t.mut}}>{bI(p.brand)} {bL(p.brand)}</span>{p.seller_level&&<span style={{fontSize:10,color:p.seller_level.color}}>{p.seller_level.name}</span>}</div>
+<h3 style={{fontSize:14,fontWeight:600,marginBottom:6,lineHeight:1.4}}>{p.name}</h3>
+{p.seller_rating>0&&<div style={{fontSize:11,color:"#E67E22",marginBottom:6}}>⭐ {p.seller_rating} ({p.seller_review_count}건)</div>}
+{p.original_price&&<div style={{display:"flex",alignItems:"baseline",gap:6,marginBottom:2}}><span style={{color:"#e74c3c",fontSize:15,fontWeight:700}}>{pc(p.original_price,p.price)}%</span><span style={{fontSize:18,fontWeight:700}}>{fS(p.price)}</span></div>}
+{!p.original_price&&<div style={{fontSize:18,fontWeight:700,marginBottom:2}}>{fS(p.price)}</div>}
+<div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginTop:8}}><span style={{fontSize:11,color:t.mut}}>❤️ {p.like_count||0}</span><span style={{fontSize:10,padding:"2px 8px",borderRadius:6,color:r===0?"#27ae60":G,background:r===0?"#27ae6012":G+"12"}}>{r===0?"🎉 무료":"🛡️ "+r+"%"}</span></div></div></div>)})}</div>
+{products.length===0&&<div style={{textAlign:"center",padding:"60px 20px",color:t.mut}}>상품 없음</div>}
+</div>}
+
+{/* AUCTION */}
+{tab==="auction"&&<div><div style={{textAlign:"center",padding:"16px 0 20px"}}><div style={{fontSize:13,color:"#c0392b",fontWeight:600}}>LIVE AUCTION</div></div><div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(270px,1fr))",gap:16}} className="col-m">{auctions.map(a=><div key={a.id} onClick={()=>{setSel(a);setPg("auc-d");setBOk(false);setBAmt("")}} style={{...crd,cursor:"pointer"}}><div style={{display:"flex",justifyContent:"space-between",marginBottom:8}}><span style={{padding:"3px 10px",borderRadius:8,fontSize:11,fontWeight:700,color:"#fff",background:"#c0392b"}}>LIVE</span><span style={{fontSize:11,color:t.mut}}>{a.time_left}</span></div><h3 style={{fontSize:14,fontWeight:600,marginBottom:10}}>{a.name}</h3><div style={{fontSize:20,fontWeight:700,color:"#c0392b"}}>{fS(a.current_bid||a.start_price)}</div></div>)}</div></div>}
+
+{/* COMMUNITY */}
+{tab==="community"&&<div><div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}><div style={{display:"flex",gap:6,overflowX:"auto"}}>{PT.map(p=><button key={p.id} onClick={()=>setPostType(p.id)} style={{padding:"7px 14px",borderRadius:20,fontSize:12,border:"1px solid "+(postType===p.id?"#8E44AD":t.bdr),background:postType===p.id?"#8E44AD":"transparent",color:postType===p.id?"#fff":t.sub,whiteSpace:"nowrap"}}>{p.icon} {p.label}</button>)}</div><button onClick={()=>{if(!user)return setPg("auth");setPg("write")}} style={{padding:"7px 16px",borderRadius:10,border:"none",background:G,color:"#0a0a0a",fontSize:12,fontWeight:600,flexShrink:0}}>✍️ 글쓰기</button></div>{posts.map(p=><div key={p.id} onClick={()=>{api("/api/community/"+p.id).then(d=>{if(!d.error){setSelPost(d);setPg("post-detail")}})}} style={{...crd,cursor:"pointer"}}><h3 style={{fontSize:15,fontWeight:600,marginBottom:6}}>{p.title}</h3><p style={{fontSize:13,color:t.mut,marginBottom:10,display:"-webkit-box",WebkitLineClamp:2,WebkitBoxOrient:"vertical",overflow:"hidden"}}>{p.content}</p><div style={{display:"flex",gap:12,fontSize:12,color:t.mut}}><span>{p.author_name}</span><span>❤️ {p.like_count||0}</span><span>💬 {p.comment_count||0}</span></div></div>)}</div>}
+
+{/* REWARD */}
+{tab==="reward"&&<div>
+<div style={{textAlign:"center",padding:"16px 0 20px"}}><div style={{fontSize:13,color:"#E67E22",fontWeight:600,letterSpacing:1,marginBottom:6}}>REWARD SHOP</div><p style={{fontSize:14,color:t.sub}}>거래하고 포인트 모아서 시계 받자!</p></div>
+{user&&reward&&<div style={{...crd,marginBottom:20,background:dark?"linear-gradient(135deg,#1a1500,#0f0f0f)":"linear-gradient(135deg,#FFF8E7,#FFF)",border:"1px solid "+G+"33"}}><div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}><div><div style={{fontSize:12,color:t.mut}}>내 포인트</div><div style={{fontSize:32,fontWeight:700,color:G}}>{reward.balance.toLocaleString()}<span style={{fontSize:16}}>P</span></div></div><div style={{textAlign:"right"}}><div style={{fontSize:16,fontWeight:600,color:reward.level.color}}>{reward.level.name}</div></div></div>{reward.next_level&&<div><div style={{display:"flex",justifyContent:"space-between",fontSize:12,color:t.mut,marginBottom:4}}><span>다음 등급</span><span>{reward.next_level.remaining.toLocaleString()}P</span></div><div style={{width:"100%",height:8,background:t.sf,borderRadius:4,overflow:"hidden"}}><div style={{width:reward.next_level.progress+"%",height:"100%",background:G,borderRadius:4}}/></div></div>}</div>}
+{!user&&<div style={{...crd,textAlign:"center",padding:"32px 20px"}}><div style={{fontSize:32,marginBottom:8}}>🔒</div><p style={{color:t.mut,marginBottom:12}}>로그인하면 포인트 확인 가능</p><button onClick={()=>setPg("auth")} style={{padding:"10px 24px",borderRadius:10,border:"none",background:G,color:"#0a0a0a",fontSize:14,fontWeight:600}}>로그인</button></div>}
+<div style={{...crd,marginBottom:20}}><div style={{fontSize:14,fontWeight:600,marginBottom:12}}>💡 적립 방법</div><div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(140px,1fr))",gap:8}} className="col-m">{[["구매","+100P","💳"],["판매","+100P","📦"],["리뷰","+30P","⭐"],["게시글","+20P","✍️"],["댓글","+5P","💬"],["출석","+10P","📅"]].map(([l,p,ic],i)=><div key={i} style={{background:t.sf,borderRadius:10,padding:"10px 12px",display:"flex",alignItems:"center",gap:8}}><span style={{fontSize:18}}>{ic}</span><div><div style={{fontSize:12,color:t.sub}}>{l}</div><div style={{fontSize:14,fontWeight:700,color:G}}>{p}</div></div></div>)}</div></div>
+<div style={{fontSize:16,fontWeight:600,marginBottom:12}}>🎁 교환 가능 상품</div>
+<div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(240px,1fr))",gap:12}} className="col-m">{shop.map(item=>{const ok=user&&reward&&reward.balance>=item.points_required;return(<div key={item.id} style={{...crd,position:"relative",overflow:"hidden"}}>{item.stock<=0&&<div style={{position:"absolute",inset:0,background:"rgba(0,0,0,.6)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:1,borderRadius:16}}><span style={{fontSize:20,fontWeight:700,color:"#e74c3c"}}>품절</span></div>}<div style={{textAlign:"center",fontSize:48,marginBottom:12}}>{item.image||"⌚"}</div><div style={{fontSize:15,fontWeight:600,marginBottom:4}}>{item.name}</div><div style={{fontSize:12,color:t.mut,marginBottom:10}}>{item.description}</div><div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}><div style={{fontSize:20,fontWeight:700,color:"#E67E22"}}>{item.points_required.toLocaleString()}<span style={{fontSize:13}}>P</span></div><div style={{fontSize:12,color:t.mut}}>재고 {item.stock}</div></div><button onClick={()=>doClaim(item.id)} style={{width:"100%",padding:12,borderRadius:12,border:"none",background:ok?"#E67E22":t.bdr,color:ok?"#fff":t.mut,fontSize:14,fontWeight:700}}>{ok?"교환하기":"포인트 부족"}</button></div>)})}</div>
+</div>}
+</main>
+<footer style={{borderTop:"1px solid "+t.bdr,background:t.ft,padding:"40px 24px",textAlign:"center"}}><div style={{fontFamily:"'DM Serif Display',serif",fontSize:18,marginBottom:10,color:t.txt}}>WATCHA<span style={{color:G,marginLeft:3}}>MARKET</span></div><p style={{fontSize:11,color:t.mut,marginTop:12}}>© 2026 WATCHA MARKET</p></footer>
+<button onClick={()=>{if(!user)setPg("auth");else setPg("sell")}} style={{position:"fixed",bottom:24,right:24,background:G,color:"#0a0a0a",border:"none",borderRadius:16,padding:"13px 24px",fontSize:14,fontWeight:700,boxShadow:"0 6px 32px "+G+"30",zIndex:50}}>+ 판매</button>
+</div>);
+}
+ReactDOM.render(<App/>,document.getElementById("root"));
+</script>
+</body>
+</html>
