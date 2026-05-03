@@ -1,0 +1,15 @@
+const express=require("express"),cors=require("cors"),path=require("path"),app=express();
+app.use(cors());app.use(express.json());app.use(express.static(path.join(__dirname,"public")));app.use("/uploads",express.static(path.join(__dirname,"uploads")));
+app.use("/api/auth",require("./routes/auth"));
+app.use("/api/products",require("./routes/products"));
+app.use("/api/auctions",require("./routes/auctions"));
+app.use("/api/pass",require("./routes/pass"));
+app.use("/api/community",require("./routes/community"));
+app.use("/api/transactions",require("./routes/transactions"));
+app.use("/api/rewards",require("./routes/rewards"));
+app.use("/api/notifications",require("./routes/notifications"));
+app.use("/api/chat",require("./routes/chat"));
+app.get("/api",(req,res)=>res.json({name:"WATCHA MARKET API",message:"서버 정상 작동 중!"}));
+app.get("*",(req,res)=>res.sendFile(path.join(__dirname,"public","index.html")));
+const PORT=3000;
+app.listen(PORT,()=>{console.log("");console.log("  ⌚ ═══════════════════════════════════════");console.log("  ⌚  WATCHA MARKET 시작!");console.log("  ⌚  브라우저에서 열기: http://localhost:"+PORT);console.log("  ⌚ ═══════════════════════════════════════");console.log("");});
